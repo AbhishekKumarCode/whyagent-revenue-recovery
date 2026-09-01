@@ -1,0 +1,8 @@
+# OS / editor cruft
+.DS_Store
+*.swp
+
+# Anything accidentally dropped at the repo root during dev (screenshots, scratch notes)
+/*.png
+/*.jpg
+/.playwright-mcp/
