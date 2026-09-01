@@ -1,7 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 // Ported verbatim from the Stitch design system (project 14936290080923989280)
-// so the exported markup can be used with minimal translation. See
-// stitch_source/*.html for the original exports this was extracted from.
+// so the exported markup can be used with minimal translation.
 export default {
   content: ["./index.html", "./src/**/*.{js,jsx}"],
   darkMode: "class",
