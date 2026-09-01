@@ -24,6 +24,7 @@ from .engine import (
     PRE_DEBIT_NOTIFICATION_LEAD_HOURS,
     RETRY_COST_INR,
     decide,
+    violated_hard_rule,
 )
 from .evaluate import evaluate, evaluate_by_reason, execute_outcome
 from .explain import answer
@@ -278,8 +279,14 @@ def execute_transaction(transaction_id: str, req: ExecuteRequest, user=Depends(a
             executed_action = Action(req.action)
         except ValueError:
             raise HTTPException(400, f"invalid action: {req.action}")
-        if decision.hard_rule_triggered is not None and executed_action != decision.action:
-            bypassed_hard_rule = decision.hard_rule_triggered.value
+        # Check the rule against the action actually being executed, not against
+        # whatever rule (if any) fired for the pipeline's own proposed action — an
+        # override can violate a rule the original decision never touched (e.g.
+        # overriding to message_customer for a do-not-contact customer whose
+        # original decision was retry_now, which never hit the DNC branch).
+        violated = violated_hard_rule(txn, customer, executed_action)
+        if violated is not None:
+            bypassed_hard_rule = violated.value
 
     recovered, fp_cost = execute_outcome(txn, executed_action)
     return {

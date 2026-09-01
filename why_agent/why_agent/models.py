@@ -91,4 +91,4 @@ class EvaluationResult:
     naive_total_recovered_inr: float
     naive_false_positive_cost_inr: float
     naive_false_positive_rate_pct: float
-    lift_pct: float
+    lift_pct: float | None  # None when the naive baseline recovered nothing (division by zero)

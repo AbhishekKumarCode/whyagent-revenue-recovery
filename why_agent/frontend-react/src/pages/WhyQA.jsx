@@ -67,6 +67,14 @@ export default function WhyQA() {
   const { logAction } = useActivity();
 
   useEffect(() => {
+    // Reset the chat when navigating between transactions' Why pages (e.g. via the
+    // History/Notifications dropdowns, which link straight to /transactions/{id}/why
+    // and just swap the :id param on the already-mounted component) — otherwise the
+    // previous transaction's conversation stays on screen and the seed question never
+    // re-fires for the new one.
+    setTxn(null);
+    setMessages([]);
+    seeded.current = false;
     getTransaction(id).then(setTxn);
   }, [id]);
 

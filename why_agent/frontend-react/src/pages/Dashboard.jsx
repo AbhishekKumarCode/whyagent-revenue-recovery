@@ -69,7 +69,13 @@ export default function Dashboard() {
           />
           <StatCard
             label="Recovery Rate Lift vs Naive Baseline"
-            value={evalResult ? `${evalResult.lift_pct >= 0 ? "+" : ""}${evalResult.lift_pct.toFixed(1)}%` : "–"}
+            value={
+              evalResult
+                ? evalResult.lift_pct === null
+                  ? "n/a"
+                  : `${evalResult.lift_pct >= 0 ? "+" : ""}${evalResult.lift_pct.toFixed(1)}%`
+                : "–"
+            }
             accent="text-primary-container"
             trailing={<span className="material-symbols-outlined text-primary-container" aria-hidden="true">arrow_upward</span>}
           />

@@ -79,7 +79,9 @@ def evaluate(dataset: GeneratedDataset, now: datetime | None = None) -> Evaluati
     n = len(batch)
     agent_rate = 100.0 * agent_successes / n
     naive_rate = 100.0 * naive_successes / n
-    lift = ((agent_rate - naive_rate) / naive_rate * 100.0) if naive_rate > 0 else float("inf")
+    # None (not inf) when the naive baseline recovered nothing — inf serializes to the
+    # non-standard JSON token `Infinity`, which browsers' JSON.parse rejects outright.
+    lift = round((agent_rate - naive_rate) / naive_rate * 100.0, 2) if naive_rate > 0 else None
 
     return EvaluationResult(
         batch_size=n,
@@ -91,7 +93,7 @@ def evaluate(dataset: GeneratedDataset, now: datetime | None = None) -> Evaluati
         naive_total_recovered_inr=round(naive_recovered_inr, 2),
         naive_false_positive_cost_inr=round(naive_fp_cost, 2),
         naive_false_positive_rate_pct=round(100.0 * naive_fp_count / n, 2),
-        lift_pct=round(lift, 2),
+        lift_pct=lift,
     )
 
 

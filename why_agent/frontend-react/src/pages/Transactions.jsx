@@ -108,7 +108,11 @@ export default function Transactions() {
             </p>
             <div className="mt-sm flex items-baseline gap-sm">
               <h3 className="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg text-primary-container">
-                {evalResult ? `${evalResult.lift_pct >= 0 ? "+" : ""}${evalResult.lift_pct.toFixed(1)}%` : "–"}
+                {evalResult
+                  ? evalResult.lift_pct === null
+                    ? "n/a"
+                    : `${evalResult.lift_pct >= 0 ? "+" : ""}${evalResult.lift_pct.toFixed(1)}%`
+                  : "–"}
               </h3>
               <span className="material-symbols-outlined text-primary-container" aria-hidden="true">arrow_upward</span>
             </div>

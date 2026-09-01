@@ -28,6 +28,7 @@ export default function Evaluation() {
   const absoluteLift = r.agent_recovery_rate_pct - r.naive_recovery_rate_pct;
   const agentBadge = fpBadge(r.agent_false_positive_rate_pct);
   const naiveBadge = fpBadge(r.naive_false_positive_rate_pct);
+  const donutTotal = byReason ? byReason.reduce((s, x) => s + x.batch_size, 0) : 0;
 
   return (
     <main className="flex-1 overflow-y-auto bg-background p-margin-mobile md:p-margin-desktop">
@@ -108,14 +109,15 @@ export default function Evaluation() {
                   {absoluteLift.toFixed(1)}% absolute lift
                 </span>
                 <span className="mono-num text-[12px] text-on-surface-variant">
-                  {r.lift_pct >= 0 ? "+" : ""}
-                  {r.lift_pct.toFixed(0)}% relative improvement
+                  {r.lift_pct === null
+                    ? "naive baseline recovered nothing — lift undefined"
+                    : `${r.lift_pct >= 0 ? "+" : ""}${r.lift_pct.toFixed(0)}% relative improvement`}
                 </span>
               </div>
               <div className="w-[120px] h-2 bg-surface-variant rounded-full overflow-hidden hidden sm:block">
                 <div
                   className="h-full bg-tertiary-container rounded-full"
-                  style={{ width: `${Math.min(100, Math.max(0, r.lift_pct))}%` }}
+                  style={{ width: `${Math.min(100, Math.max(0, r.lift_pct ?? 100))}%` }}
                 />
               </div>
             </div>
@@ -154,8 +156,7 @@ export default function Evaluation() {
                   />
                   <div className="flex-1 flex flex-col gap-sm">
                     {byReason.map((r) => {
-                      const total = byReason.reduce((s, x) => s + x.batch_size, 0);
-                      const pct = Math.round((r.batch_size / total) * 100);
+                      const pct = Math.round((r.batch_size / donutTotal) * 100);
                       return (
                         <div key={r.failure_reason} className="flex items-center gap-sm">
                           <span

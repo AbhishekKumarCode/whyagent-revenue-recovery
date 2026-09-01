@@ -10,7 +10,15 @@ import random
 import string
 from dataclasses import dataclass
 
+from .engine import MAX_RETRY_ATTEMPTS
 from .models import CustomerHistory, FailureReason, Transaction
+
+# Weighted so most transactions are a first failure, but a realistic minority have
+# already been retried before — including some already at MAX_RETRY_ATTEMPTS, so the
+# max-retries hard rule actually gets exercised by the running app (it was previously
+# dead code from the app's point of view: every transaction was generated at attempt 0,
+# so nothing ever reached the >= MAX_RETRY_ATTEMPTS gate outside unit tests).
+_ATTEMPT_NUMBER_WEIGHTS = [0.70, 0.15, 0.10, 0.05]  # attempts 0, 1, 2, MAX_RETRY_ATTEMPTS
 
 # Organic-feeling synthetic identity data — still entirely synthetic (no real
 # people), but shaped like a real Indian D2C subscription-box customer base
@@ -171,7 +179,7 @@ def generate(
                 amount_inr=amount,
                 plan_name=plan_name,
                 failure_reason=reason,
-                attempt_number=0,
+                attempt_number=rng.choices(range(MAX_RETRY_ATTEMPTS + 1), weights=_ATTEMPT_NUMBER_WEIGHTS)[0],
                 is_held_out=is_held_out,
                 ground_truth_would_succeed_immediate=gt_immediate,
                 ground_truth_would_succeed_delayed=gt_delayed,

@@ -91,6 +91,28 @@ def _decide(txn: Transaction, customer: CustomerHistory) -> tuple[Action, float 
     )
 
 
+def violated_hard_rule(txn: Transaction, customer: CustomerHistory, action: Action) -> HardRule | None:
+    """Which hard rule (if any) a *specific* action would violate for this txn/customer —
+    independent of whatever the decision pipeline itself proposed. Used both by
+    _apply_hard_rules below (checking the pipeline's own proposed action) and by the
+    /execute endpoint's override path (checking a caller-supplied action), so an
+    override that quietly violates a rule the pipeline would have blocked is never
+    reported as bypass-free just because the pipeline happened to propose something else."""
+    if txn.attempt_number >= MAX_RETRY_ATTEMPTS and action != Action.GIVE_UP:
+        return HardRule.MAX_RETRIES
+    if customer.is_fraud_flagged and action != Action.HOLD:
+        return HardRule.FRAUD_ESCALATE
+    if customer.is_do_not_contact and action == Action.MESSAGE_CUSTOMER:
+        return HardRule.DO_NOT_CONTACT
+    if customer.customer_value_score < COST_VALUE_CUTOFF and action in (
+        Action.RETRY_NOW,
+        Action.RETRY_LATER,
+        Action.MESSAGE_CUSTOMER,
+    ):
+        return HardRule.COST_NOT_WORTH_IT
+    return None
+
+
 def _apply_hard_rules(
     txn: Transaction,
     customer: CustomerHistory,
@@ -99,35 +121,39 @@ def _apply_hard_rules(
 ) -> tuple[Action, float | None, HardRule | None, TraceStep]:
     """Non-negotiable gate — can only make the outcome MORE conservative, never less.
     See docs/PRD.md §6.3 for the four rules this enforces."""
-    action, hours, triggered = proposed_action, proposed_hours, None
-    detail = {"result": "pass"}
+    triggered = violated_hard_rule(txn, customer, proposed_action)
 
-    if txn.attempt_number >= MAX_RETRY_ATTEMPTS:
-        action, hours, triggered = Action.GIVE_UP, None, HardRule.MAX_RETRIES
+    if triggered == HardRule.MAX_RETRIES:
+        action, hours = Action.GIVE_UP, None
         detail = {"result": "fail", "rule": "max_retries", "detail": f"attempt {txn.attempt_number} >= max {MAX_RETRY_ATTEMPTS}"}
-    elif customer.is_fraud_flagged:
-        action, hours, triggered = Action.HOLD, None, HardRule.FRAUD_ESCALATE
+    elif triggered == HardRule.FRAUD_ESCALATE:
+        action, hours = Action.HOLD, None
         detail = {"result": "fail", "rule": "fraud_escalate", "detail": "customer fraud/risk signal is flagged — escalating to human hold, never auto-retrying"}
-    elif customer.is_do_not_contact and action == Action.MESSAGE_CUSTOMER:
-        action, hours, triggered = Action.GIVE_UP, None, HardRule.DO_NOT_CONTACT
+    elif triggered == HardRule.DO_NOT_CONTACT:
+        action, hours = Action.GIVE_UP, None
         detail = {"result": "fail", "rule": "do_not_contact", "detail": "customer is flagged do-not-contact — cannot message, and a silent retry wouldn't fix this failure reason, so give up"}
-    elif customer.customer_value_score < COST_VALUE_CUTOFF and action in (Action.RETRY_NOW, Action.RETRY_LATER, Action.MESSAGE_CUSTOMER):
-        action, hours, triggered = Action.GIVE_UP, None, HardRule.COST_NOT_WORTH_IT
+    elif triggered == HardRule.COST_NOT_WORTH_IT:
+        action, hours = Action.GIVE_UP, None
         detail = {"result": "fail", "rule": "cost_not_worth_it", "detail": f"customer value score {customer.customer_value_score:.2f} below cutoff {COST_VALUE_CUTOFF:.2f} — retry/messaging cost isn't justified"}
     else:
+        action, hours = proposed_action, proposed_hours
         detail = {"result": "pass", "detail": f"attempt {txn.attempt_number} of {MAX_RETRY_ATTEMPTS}, not fraud-flagged, contact/value checks clear"}
 
     return action, hours, triggered, TraceStep(step="hard_rule_check", detail=detail)
 
 
 def _next_allowed_slot(dt: datetime) -> datetime:
-    """Shift a datetime forward out of any NPCI-blocked execution window."""
-    hour = dt.hour + dt.minute / 60
-    for start, end in BLOCKED_WINDOWS:
-        if start <= hour < end:
-            shifted = dt.replace(minute=0, second=0, microsecond=0) + timedelta(hours=(end - hour))
-            return shifted
-    return dt
+    """Shift a datetime forward out of any NPCI-blocked execution window. Loops
+    until no window matches — a single pass would only be safe if BLOCKED_WINDOWS
+    is guaranteed non-adjacent, which isn't a constraint worth relying on."""
+    while True:
+        hour = dt.hour + dt.minute / 60
+        for start, end in BLOCKED_WINDOWS:
+            if start <= hour < end:
+                dt = dt.replace(minute=0, second=0, microsecond=0) + timedelta(hours=(end - hour))
+                break
+        else:
+            return dt
 
 
 def _apply_regulatory_timing(action: Action, hours: float | None, now: datetime) -> tuple[datetime | None, TraceStep]:

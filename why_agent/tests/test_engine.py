@@ -5,7 +5,7 @@ from dataclasses import replace
 from datetime import datetime
 
 from why_agent.data_gen import generate
-from why_agent.engine import MAX_RETRY_ATTEMPTS, decide
+from why_agent.engine import MAX_RETRY_ATTEMPTS, decide, violated_hard_rule
 from why_agent.evaluate import evaluate, evaluate_by_reason, execute_outcome
 from why_agent.models import Action, FailureReason, HardRule
 
@@ -29,6 +29,13 @@ def test_hard_rule_max_retries_never_violated():
 def test_fraud_flagged_never_auto_retries():
     ds = _dataset()
     for txn in ds.transactions:
+        # Isolate fraud-escalation behavior from the (separately tested, higher-priority)
+        # max-retries rule: data_gen now generates a realistic minority of transactions
+        # already at MAX_RETRY_ATTEMPTS, and for those the engine correctly reports
+        # GIVE_UP/MAX_RETRIES even when fraud-flagged — max-retries firing first is the
+        # existing, intended priority order (see engine.violated_hard_rule).
+        if txn.attempt_number >= MAX_RETRY_ATTEMPTS:
+            continue
         customer = replace(ds.customers[txn.customer_id], is_fraud_flagged=True)
         decision = decide(txn, customer, now=NOW)
         assert decision.action == Action.HOLD
@@ -150,3 +157,25 @@ def test_execute_outcome_hold_and_give_up_never_recover():
         recovered, fp_cost = execute_outcome(txn, action)
         assert recovered is False
         assert fp_cost == 0.0
+
+
+def test_violated_hard_rule_catches_override_the_original_decision_never_touched():
+    """An override to MESSAGE_CUSTOMER for a do-not-contact customer must be flagged
+    even when the pipeline's own proposed action was never message_customer (e.g. it
+    proposed retry_now, so the DNC branch never fired inside the normal decide() path).
+    This is what the /execute endpoint's override-bypass warning relies on."""
+    ds = _dataset(n=50, seed=3)
+    txn = replace(ds.transactions[0], attempt_number=0)
+    customer = replace(ds.customers[txn.customer_id], is_do_not_contact=True, is_fraud_flagged=False)
+    assert violated_hard_rule(txn, customer, Action.MESSAGE_CUSTOMER) == HardRule.DO_NOT_CONTACT
+    assert violated_hard_rule(txn, customer, Action.RETRY_NOW) is None
+
+
+def test_evaluation_lift_pct_is_none_not_infinite_when_naive_recovers_nothing():
+    """lift_pct must never be float('inf') — Infinity is not valid JSON and breaks
+    JSON.parse in the browser for every page that fetches /evaluation or
+    /evaluation/by-reason."""
+    breakdown = evaluate_by_reason(_dataset(n=200, seed=11), now=NOW)
+    zero_naive_rows = [r for r in breakdown if r["naive_recovery_rate_pct"] == 0]
+    assert zero_naive_rows, "test dataset/seed no longer produces a zero-naive-recovery bucket — pick a new seed"
+    assert all(r["lift_pct"] is None for r in zero_naive_rows)
