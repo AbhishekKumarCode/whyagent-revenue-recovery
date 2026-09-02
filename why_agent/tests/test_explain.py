@@ -27,9 +27,11 @@ def test_why_answer_discloses_hard_rule_override():
     assert decision.action == Action.HOLD
 
     response = answer(decision, "Why did you make this decision?")
-    assert "fixed rule blocks it" in response.lower() or "final action" in response.lower()
-    # Must not claim a retry action as the final decision when it was overridden to HOLD
-    assert "retry_later" not in response.split("overrode")[-1] if "overrode" in response else True
+    # Must disclose that a rule overrode the raw retry math, and must state the
+    # actual final action (holding), never the pre-override action as if final.
+    assert "but" in response.lower()
+    assert "we're holding" in response.lower() or "holding rather than acting" in response.lower()
+    assert "we're retrying" not in response.lower() and "we're waiting" not in response.lower()
 
 
 def test_why_answer_matches_final_action_when_no_override():
@@ -40,6 +42,6 @@ def test_why_answer_matches_final_action_when_no_override():
         decision = decide(txn, customer, now=NOW)
         if decision.hard_rule_triggered is None:
             response = answer(decision, "Why did you make this decision?")
-            assert "overrode" not in response.lower()
+            assert "retry math actually looked fine here, but" not in response.lower()
             return
     raise AssertionError("expected at least one transaction with no hard-rule override in this sample")
