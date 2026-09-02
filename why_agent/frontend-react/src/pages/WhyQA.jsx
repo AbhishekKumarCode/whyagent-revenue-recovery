@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { getTransaction, askWhy, inr } from "../api.js";
-import { ACTION_LABEL, TRACE_STEP_LABEL } from "../constants.js";
+import { ACTION_LABEL } from "../constants.js";
 import { useActivity } from "../context/ActivityContext.jsx";
+import TraceStep from "../components/TraceStep.jsx";
 
 // One real, human-readable line per step — not just "Classify" with no content.
 function summarizeStep(step) {
@@ -157,29 +158,15 @@ export default function WhyQA() {
             </div>
           </div>
         </div>
-        <div className="bg-surface-container-lowest border border-outline-variant rounded p-md flex flex-col gap-md mt-auto">
-          <div className="flex items-center gap-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">
+        <div className="bg-surface-container-lowest border border-outline-variant rounded p-md flex flex-col gap-sm flex-1 min-h-0">
+          <div className="flex items-center gap-sm font-label-md text-label-md text-on-surface-variant uppercase tracking-wider shrink-0">
             <span className="material-symbols-outlined text-[16px]" aria-hidden="true">history</span>
             Decision Audit Trail
           </div>
-          <div className="flex flex-col gap-0 border-l-2 border-outline-variant ml-sm pl-sm py-xs">
-            {txn.decision.trace.map((step, i) => {
-              const isLast = i === txn.decision.trace.length - 1;
-              const isFail = step.detail.result === "fail";
-              return (
-                <div key={step.step} className={isLast ? "relative" : "relative pb-md"}>
-                  <div
-                    className={`absolute w-2 h-2 rounded-full -left-[13px] top-1 ${
-                      isFail ? "bg-error" : isLast ? "bg-primary ring-2 ring-surface-container-lowest" : "bg-outline-variant"
-                    }`}
-                  />
-                  <div className={`font-label-sm text-label-sm mb-xs ${isFail ? "text-error font-semibold" : isLast ? "text-primary font-semibold" : "text-on-surface-variant"}`}>
-                    {TRACE_STEP_LABEL[step.step] || step.step}
-                  </div>
-                  <div className="font-body-md text-body-md text-on-surface leading-snug">{summarizeStep(step)}</div>
-                </div>
-              );
-            })}
+          <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-outline-variant/40 -mx-1 px-1">
+            {txn.decision.trace.map((step, i) => (
+              <TraceStep key={step.step} index={i} step={step} summary={summarizeStep(step)} compact />
+            ))}
           </div>
         </div>
       </div>
