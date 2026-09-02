@@ -80,7 +80,13 @@ def _decide(txn: Transaction, customer: CustomerHistory) -> tuple[Action, float 
         rationale = f"Immediate retry success ({immediate:.0%}) already clears the {RETRY_WORTH_IT_THRESHOLD:.0%} bar — no reason to wait"
     elif txn.failure_reason.value in ("mandate_expiry", "app_uninstall"):
         action, hours, confidence = Action.MESSAGE_CUSTOMER, None, 1 - max(immediate, delayed)
-        rationale = "Neither immediate nor delayed retry clears the worth-it bar for this failure reason — a silent retry won't fix an expired mandate or a deleted app, the customer needs to act"
+        reason_label = txn.failure_reason.value.replace("_", " ")
+        article = "an" if reason_label[0] in "aeiou" else "a"
+        rationale = (
+            f"Neither immediate ({immediate:.0%}) nor delayed ({delayed:.0%}) retry clears the "
+            f"{RETRY_WORTH_IT_THRESHOLD:.0%} worth-it bar for {article} {reason_label} failure — a silent "
+            "retry won't fix an expired mandate or a deleted app, the customer needs to act"
+        )
     else:
         action, hours, confidence = Action.HOLD, None, 1 - max(immediate, delayed)
         rationale = f"Both immediate ({immediate:.0%}) and delayed ({delayed:.0%}) retry success are below the {RETRY_WORTH_IT_THRESHOLD:.0%} worth-it bar — holding rather than wasting an attempt"
