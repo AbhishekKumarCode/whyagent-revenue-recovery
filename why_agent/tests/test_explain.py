@@ -27,7 +27,7 @@ def test_why_answer_discloses_hard_rule_override():
     assert decision.action == Action.HOLD
 
     response = answer(decision, "Why did you make this decision?")
-    assert "override" in response.lower() or "hard stopping rule" in response.lower()
+    assert "fixed rule blocks it" in response.lower() or "final action" in response.lower()
     # Must not claim a retry action as the final decision when it was overridden to HOLD
     assert "retry_later" not in response.split("overrode")[-1] if "overrode" in response else True
 

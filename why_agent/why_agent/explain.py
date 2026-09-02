@@ -18,16 +18,17 @@ def _find_step(decision: Decision, step_name: str) -> dict | None:
     return None
 
 
-def _rationale_with_override_note(decide_detail: dict, hard_rule: dict) -> str:
-    """The `decide` step's rationale describes the retry-timing logic's initial
-    inclination — but a hard rule can override that outcome afterward (see
+def _rationale_with_override_note(decide_detail: dict, hard_rule: dict, final_action: str) -> str:
+    """The `decide` step's rationale describes what the retry-timing logic alone
+    would pick — but a hard rule can block that outcome afterward (see
     docs/TRD.md §4.4). Never surface the pre-override rationale as if it were
-    the final decision; always disclose the override when one happened."""
+    the final decision; always state the final action plainly when a rule fired."""
     base = decide_detail.get("rationale", "")
     if hard_rule.get("result") == "fail":
         return (
-            f"The retry-timing logic initially leaned toward '{decide_detail.get('chosen_action')}' "
-            f"because {base}. However, a hard stopping rule overrode that: {hard_rule.get('detail', '')}"
+            f"By the numbers, '{decide_detail.get('chosen_action')}' looked right — {base}. "
+            f"But a fixed rule blocks it here: {hard_rule.get('detail', '')}. "
+            f"Final action: {final_action}."
         )
     return base
 
@@ -55,12 +56,12 @@ def answer(decision: Decision, question: str) -> str:
             return (
                 f"Immediate retry succeeds {imm:.0%} of the time for this failure reason and "
                 f"customer history, versus {delayed:.0%} if we wait 6 hours instead. "
-                f"{_rationale_with_override_note(decide_detail, hard_rule)}"
+                f"{_rationale_with_override_note(decide_detail, hard_rule, decision.action.value)}"
             )
 
     if any(k in q for k in ["why", "reason", "decide", "decision"]):
         if decide_detail:
-            return _rationale_with_override_note(decide_detail, hard_rule) or "No rationale recorded for this decision."
+            return _rationale_with_override_note(decide_detail, hard_rule, decision.action.value) or "No rationale recorded for this decision."
 
     if any(k in q for k in ["wait", "timing", "24", "notification", "compliant", "rbi", "npci"]):
         if timing.get("result") == "pass":
@@ -76,10 +77,10 @@ def answer(decision: Decision, question: str) -> str:
     if any(k in q for k in ["cost", "worth", "value"]):
         value = evidence.get("customer_value_score")
         if value is not None:
-            return f"This customer's value score is {value:.2f}. {_rationale_with_override_note(decide_detail, hard_rule)}"
+            return f"This customer's value score is {value:.2f}. {_rationale_with_override_note(decide_detail, hard_rule, decision.action.value)}"
 
     # Fallback: surface the full rationale + confidence rather than a generic non-answer
     return (
         f"Decision: {decision.action.value} (confidence {decision.confidence:.0%}). "
-        f"{_rationale_with_override_note(decide_detail, hard_rule)}"
+        f"{_rationale_with_override_note(decide_detail, hard_rule, decision.action.value)}"
     )
