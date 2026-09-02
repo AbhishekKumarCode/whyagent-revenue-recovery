@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -49,6 +49,13 @@ auth.init_db()
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/")
+def root():
+    # Visiting the bare domain should land users in the app, not a 404 —
+    # the SPA itself lives under /app (see the StaticFiles mount below).
+    return RedirectResponse(url="/app/dashboard")
 
 
 class RegisterRequest(BaseModel):
