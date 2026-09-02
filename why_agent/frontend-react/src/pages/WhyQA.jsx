@@ -116,7 +116,7 @@ export default function WhyQA() {
   }
 
   return (
-    <main className="flex-1 overflow-hidden flex bg-surface p-gutter gap-gutter">
+    <main className="h-full overflow-hidden flex bg-surface p-gutter gap-gutter">
       {/* Left: transaction context + audit trail */}
       <div className="w-[320px] shrink-0 flex flex-col gap-sm">
         <div className="flex items-center gap-xs text-on-surface-variant mb-xs">
