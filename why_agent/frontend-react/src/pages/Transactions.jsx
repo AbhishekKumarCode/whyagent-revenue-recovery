@@ -60,6 +60,12 @@ export default function Transactions() {
   const [error, setError] = useState(null);
   const [searchParams] = useSearchParams();
   const query = (searchParams.get("q") || "").toLowerCase();
+  // Exact customer_id filter (set by clicking a customer in the table) — kept
+  // separate from the free-text search, which matches on name substrings and
+  // can't reliably distinguish two different customers who share a name (the
+  // synthetic name pool is much smaller than the customer count).
+  const customerFilter = searchParams.get("customer");
+  const customerFilterName = searchParams.get("customerName");
   const navigate = useNavigate();
 
   const load = useCallback(() => {
@@ -72,6 +78,7 @@ export default function Transactions() {
 
   const filtered = useMemo(() => {
     if (!txns) return null;
+    if (customerFilter) return txns.filter((t) => t.customer_id === customerFilter);
     if (!query) return txns;
     return txns.filter(
       (t) =>
@@ -80,9 +87,19 @@ export default function Transactions() {
         t.transaction_id.toLowerCase().includes(query) ||
         FAILURE_REASON_LABEL[t.failure_reason].toLowerCase().includes(query)
     );
-  }, [txns, query]);
+  }, [txns, query, customerFilter]);
 
-  useEffect(() => setPage(0), [query]);
+  useEffect(() => setPage(0), [query, customerFilter]);
+
+  const viewCustomer = (e, t) => {
+    e.stopPropagation();
+    navigate({
+      pathname: "/transactions",
+      search: `?customer=${encodeURIComponent(t.customer_id)}&customerName=${encodeURIComponent(t.customer_name)}`,
+    });
+  };
+
+  const clearCustomerFilter = () => navigate({ pathname: "/transactions" });
 
   const pageRows = filtered?.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
   const pageCount = filtered ? Math.ceil(filtered.length / PAGE_SIZE) : 0;
@@ -158,10 +175,31 @@ export default function Transactions() {
         {/* Main Data Table */}
         <div className="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-sm overflow-hidden mt-xl">
           <div className="px-lg py-md border-b border-outline-variant flex justify-between items-center bg-surface">
-            <h3 className="font-headline-sm text-headline-sm text-on-surface">Failed UPI AutoPay Payments</h3>
+            <h3 className="font-headline-sm text-headline-sm text-on-surface">
+              {customerFilter ? (
+                <span className="flex items-center gap-sm flex-wrap">
+                  <span className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-primary text-[18px]" aria-hidden="true">person</span>
+                    Payment history — {customerFilterName || "this customer"}
+                  </span>
+                  <span className="font-label-sm text-label-sm text-on-surface-variant font-normal">
+                    {filtered?.length ?? "…"} failed payment{filtered?.length === 1 ? "" : "s"} in this batch
+                  </span>
+                  <button
+                    onClick={clearCustomerFilter}
+                    className="font-label-sm text-label-sm text-primary hover:underline font-normal flex items-center gap-0.5"
+                  >
+                    <span className="material-symbols-outlined text-[14px]" aria-hidden="true">close</span>
+                    Clear
+                  </button>
+                </span>
+              ) : (
+                "Failed UPI AutoPay Payments"
+              )}
+            </h3>
             <button
               className="text-on-surface-variant hover:text-primary transition-colors"
-              title="Column filters not built for this demo — use the search box above"
+              title="Column filters not built for this demo — use the search box above, or click a customer to see their history"
             >
               <span className="material-symbols-outlined" aria-hidden="true">filter_list</span>
             </button>
@@ -205,16 +243,16 @@ export default function Transactions() {
                       }`}
                     >
                       <td className="py-md px-md">
-                        <div className="flex items-center gap-sm">
+                        <div className="flex items-center gap-sm group/cust" onClick={(e) => viewCustomer(e, t)} title="View this customer's payment history">
                           <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center font-label-sm text-label-sm font-semibold shrink-0 ${
+                            className={`w-8 h-8 rounded-full flex items-center justify-center font-label-sm text-label-sm font-semibold shrink-0 transition-transform group-hover/cust:scale-105 ${
                               isFraud ? "bg-error-container text-on-error-container" : "bg-secondary-container text-on-secondary-container"
                             }`}
                           >
                             {initials(t.customer_name)}
                           </div>
                           <div className="min-w-0">
-                            <div className={`font-medium truncate ${isFraud ? "text-error" : ""}`}>{t.customer_name}</div>
+                            <div className={`font-medium truncate group-hover/cust:underline ${isFraud ? "text-error" : ""}`}>{t.customer_name}</div>
                             <div className="text-xs text-on-surface-variant truncate flex items-center gap-1 flex-wrap">
                               <span>{t.plan_name}</span>
                               {ctx.months_active != null && <span>· {ctx.months_active}mo customer</span>}

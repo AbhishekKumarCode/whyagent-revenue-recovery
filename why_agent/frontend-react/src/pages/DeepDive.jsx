@@ -182,8 +182,15 @@ export default function DeepDive() {
               </span>
             </h2>
             <p className="font-body-md text-body-md text-on-surface-variant mt-1 max-w-3xl">
-              Customer: <span className="font-medium text-on-surface">{data.customer_name}</span> | Plan:{" "}
-              <span className="font-medium text-on-surface">{data.plan_name}</span> | Amount:{" "}
+              Customer:{" "}
+              <Link
+                to={`/transactions?customer=${encodeURIComponent(data.customer_id)}&customerName=${encodeURIComponent(data.customer_name)}`}
+                className="font-medium text-on-surface hover:text-primary hover:underline"
+                title="View this customer's payment history"
+              >
+                {data.customer_name}
+              </Link>{" "}
+              | Plan: <span className="font-medium text-on-surface">{data.plan_name}</span> | Amount:{" "}
               <span className="font-medium text-on-surface">{inr(data.amount_inr)}</span> | Failure:{" "}
               <span className="font-medium text-on-surface">"{FAILURE_REASON_LABEL[data.failure_reason]}"</span>
             </p>
