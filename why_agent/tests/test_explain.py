@@ -27,10 +27,12 @@ def test_why_answer_discloses_hard_rule_override():
     assert decision.action == Action.HOLD
 
     response = answer(decision, "Why did you make this decision?")
-    # Must disclose that a rule overrode the raw retry math, and must state the
+    # Must disclose that a rule overrode the raw retry math (one of a few
+    # phrasings — see HARD_RULE_PLAIN_VARIANTS' openers), and must state the
     # actual final action (holding), never the pre-override action as if final.
-    assert "but" in response.lower()
-    assert "we're holding" in response.lower() or "holding rather than acting" in response.lower()
+    disclosure_openers = ["but", "the numbers weren't the problem here"]
+    assert any(o in response.lower() for o in disclosure_openers)
+    assert "we're holding" in response.lower() or "on hold" in response.lower() or "pausing" in response.lower()
     assert "we're retrying" not in response.lower() and "we're waiting" not in response.lower()
 
 

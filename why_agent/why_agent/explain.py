@@ -77,15 +77,19 @@ def _find_step(decision: Decision, step_name: str) -> dict | None:
     return None
 
 
-def _plain_reason(decision: Decision, hard_rule: dict, classify: dict) -> str:
+def _plain_reason(decision: Decision, hard_rule: dict, classify: dict, seed: str) -> str:
     """A conversational, number-light explanation of the final action — what a
-    person would actually say out loud, not a recap of the trace's raw fields."""
-    txn_id = decision.transaction_id
-    final = _pick(txn_id, ACTION_PLAIN_VARIANTS.get(decision.action.value, [decision.action.value]))
+    person would actually say out loud, not a recap of the trace's raw fields.
+    `seed` includes the actual question text (not just the transaction id) so
+    that rephrasing the question ("why?" vs "explain the reason") lands on a
+    different variant instead of returning byte-identical text — two
+    differently-worded questions getting the exact same answer is what reads
+    as templated/robotic, even more than the wording of the answer itself."""
+    final = _pick(seed, ACTION_PLAIN_VARIANTS.get(decision.action.value, [decision.action.value]))
 
     if hard_rule.get("result") == "fail":
-        rule_plain = _pick(txn_id, HARD_RULE_PLAIN_VARIANTS.get(hard_rule.get("rule"), [hard_rule.get("detail", "")]))
-        opener = _pick(txn_id, [
+        rule_plain = _pick(seed, HARD_RULE_PLAIN_VARIANTS.get(hard_rule.get("rule"), [hard_rule.get("detail", "")]))
+        opener = _pick(seed, [
             "The retry math actually looked fine here, but",
             "On paper this looked retryable, but",
             "The numbers weren't the problem here —",
@@ -96,25 +100,25 @@ def _plain_reason(decision: Decision, hard_rule: dict, classify: dict) -> str:
     reason_plain = FAILURE_REASON_PLAIN.get(reason_label, "this kind of failure")
 
     if decision.action == Action.RETRY_LATER:
-        return _pick(txn_id, [
+        return _pick(seed, [
             f"Waiting a few hours works noticeably better than retrying right away for this kind of failure, so {final}.",
             f"This one's worth being patient with — a delayed retry clearly beats an immediate one here, so {final}.",
             f"Retrying immediately wouldn't be the smart move here; waiting first gives it a much better shot, so {final}.",
         ])
     if decision.action == Action.RETRY_NOW:
-        return _pick(txn_id, [
+        return _pick(seed, [
             f"Retrying right away already works well enough here, so there's no real reason to wait — {final}.",
             f"This one's straightforward — an immediate retry already clears the bar, so {final}.",
             f"No need to wait on this one; the odds are already good enough right away, so {final}.",
         ])
     if decision.action == Action.MESSAGE_CUSTOMER:
-        return _pick(txn_id, [
+        return _pick(seed, [
             f"A silent retry can't fix this — {reason_plain}, so the customer has to act themselves. That's why {final}.",
             f"Retrying quietly won't help here — {reason_plain}. Only the customer can fix that, so {final}.",
             f"This isn't something a retry can solve on its own — {reason_plain}. So {final}, rather than burning a retry attempt on it.",
         ])
     if decision.action == Action.HOLD:
-        return _pick(txn_id, [
+        return _pick(seed, [
             f"Neither retrying now nor waiting looks likely to work here, so {final} instead of wasting an attempt.",
             f"The odds aren't good either way — now or later — so {final} rather than guessing.",
             f"This one doesn't clear the bar for retrying now or later, so {final}.",
@@ -124,6 +128,7 @@ def _plain_reason(decision: Decision, hard_rule: dict, classify: dict) -> str:
 
 def answer(decision: Decision, question: str) -> str:
     q = question.lower()
+    seed = decision.transaction_id + q
     evidence = _find_step(decision, "gather_evidence") or {}
     hard_rule = _find_step(decision, "hard_rule_check") or {}
     timing = _find_step(decision, "regulatory_timing_check") or {}
@@ -147,10 +152,10 @@ def answer(decision: Decision, question: str) -> str:
                 comparison = "retrying right away works meaningfully better than waiting"
             else:
                 comparison = "retrying right away and waiting work about the same"
-            return f"For this kind of failure, {comparison}. {_plain_reason(decision, hard_rule, classify)}"
+            return f"For this kind of failure, {comparison}. {_plain_reason(decision, hard_rule, classify, seed)}"
 
-    if any(k in q for k in ["why", "reason", "decide", "decision"]):
-        return _plain_reason(decision, hard_rule, classify)
+    if any(k in q for k in ["why", "reason", "decide", "decision", "explain"]):
+        return _plain_reason(decision, hard_rule, classify, seed)
 
     if any(k in q for k in ["wait", "timing", "24", "notification", "compliant", "rbi", "npci"]):
         if timing.get("result") == "pass":
@@ -165,7 +170,7 @@ def answer(decision: Decision, question: str) -> str:
     if any(k in q for k in ["cost", "worth", "value"]):
         value = evidence.get("customer_value_score", 0)
         tier = "a high-value" if value >= 0.6 else "a lower-value" if value < COST_TIER_CUTOFF else "an average-value"
-        return f"This is {tier} customer based on their history. {_plain_reason(decision, hard_rule, classify)}"
+        return f"This is {tier} customer based on their history. {_plain_reason(decision, hard_rule, classify, seed)}"
 
     # Fallback: still plain-English, no raw trace dump
-    return _plain_reason(decision, hard_rule, classify)
+    return _plain_reason(decision, hard_rule, classify, seed)
