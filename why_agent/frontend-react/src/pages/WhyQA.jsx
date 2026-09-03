@@ -59,15 +59,42 @@ function Bubble({ role, text }) {
   );
 }
 
+function TypingBubble() {
+  return (
+    <div className="flex flex-col items-start gap-xs max-w-[85%] self-start relative z-10">
+      <div className="flex items-center gap-xs pl-xs">
+        <span className="material-symbols-outlined text-primary text-[16px]" style={{ fontVariationSettings: "'FILL' 1" }} aria-hidden="true">
+          smart_toy
+        </span>
+        <span className="font-label-sm text-label-sm text-primary font-semibold">WHY Agent</span>
+      </div>
+      <div className="bg-primary-fixed text-on-primary-fixed p-md rounded-xl rounded-tl-sm border border-outline-variant shadow-sm flex items-center gap-1">
+        {[0, 1, 2].map((i) => (
+          <span
+            key={i}
+            className="w-1.5 h-1.5 rounded-full bg-on-primary-fixed/50 animate-bounce"
+            style={{ animationDelay: `${i * 120}ms` }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function WhyQA() {
   const { id } = useParams();
   const [txn, setTxn] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [error, setError] = useState(null);
+  const [typing, setTyping] = useState(false);
+  const [busy, setBusy] = useState(false);
   const threadRef = useRef(null);
   const seeded = useRef(false);
+  const timers = useRef([]);
   const { logAction } = useActivity();
+
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const load = useCallback(() => {
     // Reset the chat when navigating between transactions' Why pages (e.g. via the
@@ -98,8 +125,45 @@ export default function WhyQA() {
 
   async function send(question, { isSeed = false } = {}) {
     setMessages((m) => [...m, { role: "user", text: question }]);
+    setBusy(true);
+    setTyping(true);
+
     const res = await askWhy(id, question);
-    setMessages((m) => [...m, { role: "agent", text: res.answer }]);
+
+    // A brief "composing" pause before the reply starts appearing — an instant
+    // reply reads as canned, a short beat first reads as the agent actually
+    // having worked something out. Kept short since the real fetch above
+    // (especially the DeepSeek path) already carries its own network latency —
+    // this is on top of that, not instead of it.
+    await new Promise((r) => timers.current.push(setTimeout(r, 200 + Math.random() * 250)));
+    setTyping(false);
+
+    // Type the answer out character-by-character instead of dropping the full
+    // text in at once.
+    const full = res.answer;
+    setMessages((m) => [...m, { role: "agent", text: "" }]);
+    const totalMs = Math.min(800, 400 + full.length * 2);
+    const stepMs = 20;
+    const steps = Math.max(1, Math.round(totalMs / stepMs));
+    const chunk = Math.max(1, Math.ceil(full.length / steps));
+    let i = 0;
+    await new Promise((resolve) => {
+      const interval = setInterval(() => {
+        i += chunk;
+        setMessages((m) => {
+          const copy = [...m];
+          copy[copy.length - 1] = { role: "agent", text: full.slice(0, i) };
+          return copy;
+        });
+        if (i >= full.length) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, stepMs);
+      timers.current.push(interval);
+    });
+
+    setBusy(false);
     if (!isSeed) {
       logAction({
         icon: "psychology",
@@ -112,7 +176,7 @@ export default function WhyQA() {
 
   const handleSend = () => {
     const q = input.trim();
-    if (!q) return;
+    if (!q || busy) return;
     setInput("");
     send(q);
   };
@@ -208,6 +272,7 @@ export default function WhyQA() {
           {messages.map((m, i) => (
             <Bubble key={i} role={m.role} text={m.text} />
           ))}
+          {typing && <TypingBubble />}
         </div>
         <div className="p-md border-t border-outline-variant bg-surface-container-lowest z-10 relative">
           <div className="relative flex items-center bg-surface border border-outline-variant rounded-md focus-within:border-primary focus-within:ring-1 focus-within:ring-primary transition-all shadow-sm">
@@ -215,14 +280,16 @@ export default function WhyQA() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSend()}
-              className="w-full bg-transparent border-none py-sm pl-md pr-[48px] focus:ring-0 outline-none font-body-md text-body-md text-on-surface placeholder:text-on-surface-variant"
+              disabled={busy}
+              className="w-full bg-transparent border-none py-sm pl-md pr-[48px] focus:ring-0 outline-none font-body-md text-body-md text-on-surface placeholder:text-on-surface-variant disabled:opacity-60"
               placeholder="Ask why this decision was made…"
               type="text"
             />
             <div className="absolute right-sm flex gap-xs">
               <button
                 onClick={handleSend}
-                className="p-xs text-on-primary bg-primary hover:bg-primary-container rounded transition-colors flex items-center justify-center"
+                disabled={busy}
+                className="p-xs text-on-primary bg-primary hover:bg-primary-container rounded transition-colors flex items-center justify-center disabled:opacity-50"
               >
                 <span className="material-symbols-outlined text-[18px]" aria-hidden="true">send</span>
               </button>
