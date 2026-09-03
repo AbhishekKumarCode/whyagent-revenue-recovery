@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { getEvaluation, fetchJSON, inr } from "../api.js";
 import { FAILURE_REASON_LABEL } from "../constants.js";
 import { DonutChart, GroupedBarRow, REASON_COLOR } from "../components/charts.jsx";
+import ErrorState from "../components/ErrorState.jsx";
 
 const AGENT_COLOR = "#005faf"; // brand primary — fixed role, not part of the categorical set
 const NAIVE_COLOR = "#a8afb8"; // neutral — the baseline, deliberately recessive
@@ -15,11 +16,23 @@ function fpBadge(pct) {
 export default function Evaluation() {
   const [r, setR] = useState(null);
   const [byReason, setByReason] = useState(null);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    getEvaluation().then(setR);
-    fetchJSON("/evaluation/by-reason").then(setByReason);
+  const load = useCallback(() => {
+    setError(null);
+    getEvaluation().then(setR).catch(() => setError(true));
+    fetchJSON("/evaluation/by-reason").then(setByReason).catch(() => setError(true));
   }, []);
+
+  useEffect(load, [load]);
+
+  if (error) {
+    return (
+      <main className="flex-1 overflow-y-auto bg-background p-margin-mobile md:p-margin-desktop">
+        <ErrorState message="Couldn't load evaluation results." onRetry={load} />
+      </main>
+    );
+  }
 
   if (!r) {
     return <div className="p-lg text-on-surface-variant">Loading…</div>;
@@ -54,11 +67,11 @@ export default function Evaluation() {
                 <h2 className="font-headline-md text-headline-md text-on-surface">WHY Agent</h2>
               </div>
               <div className="space-y-sm">
-                <div className="flex justify-between items-center data-row border-b border-[#E3E8EF] px-xs">
+                <div className="flex justify-between items-center data-row border-b border-outline-variant px-xs">
                   <span className="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Recovery Rate</span>
                   <span className="mono-num font-semibold text-tertiary-container text-[16px]">{r.agent_recovery_rate_pct.toFixed(1)}%</span>
                 </div>
-                <div className="flex justify-between items-center data-row border-b border-[#E3E8EF] px-xs">
+                <div className="flex justify-between items-center data-row border-b border-outline-variant px-xs">
                   <span className="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Total Recovered</span>
                   <span className="mono-num font-semibold text-on-surface text-[16px]">{inr(r.agent_total_recovered_inr)}</span>
                 </div>
@@ -73,7 +86,7 @@ export default function Evaluation() {
             </div>
 
             {/* Naive Baseline Column */}
-            <div className="p-lg bg-[#F9FAFB] relative border-t md:border-t-0 border-outline-variant">
+            <div className="p-lg bg-surface-container-low relative border-t md:border-t-0 border-outline-variant">
               <div className="flex items-center gap-sm mb-lg opacity-70">
                 <span className="material-symbols-outlined text-on-surface-variant" aria-hidden="true">schedule</span>
                 <h2 className="font-headline-sm text-headline-sm text-on-surface-variant">
@@ -81,11 +94,11 @@ export default function Evaluation() {
                 </h2>
               </div>
               <div className="space-y-sm opacity-80">
-                <div className="flex justify-between items-center data-row border-b border-[#E3E8EF] px-xs">
+                <div className="flex justify-between items-center data-row border-b border-outline-variant px-xs">
                   <span className="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Recovery Rate</span>
                   <span className="mono-num font-medium text-on-surface text-[16px]">{r.naive_recovery_rate_pct.toFixed(1)}%</span>
                 </div>
-                <div className="flex justify-between items-center data-row border-b border-[#E3E8EF] px-xs">
+                <div className="flex justify-between items-center data-row border-b border-outline-variant px-xs">
                   <span className="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Total Recovered</span>
                   <span className="mono-num font-medium text-on-surface text-[16px]">{inr(r.naive_total_recovered_inr)}</span>
                 </div>
@@ -100,7 +113,7 @@ export default function Evaluation() {
             </div>
           </div>
 
-          <div className="border-t border-[#E3E8EF] bg-surface p-md flex items-center justify-between">
+          <div className="border-t border-outline-variant bg-surface p-md flex items-center justify-between">
             <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest">Net Recovery Improvement</span>
             <div className="flex items-center gap-md">
               <div className="flex flex-col items-end">

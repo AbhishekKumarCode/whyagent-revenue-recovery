@@ -15,14 +15,70 @@ const STAGES = [
 ];
 const STAGE_MS = 600; // 4 stages * 600ms = 2400ms total play time
 
+// One outcome result — used standalone (only one action run so far) or as one
+// column of the side-by-side comparison once both the agent's action and an
+// alternative have actually been executed.
+function OutcomeBox({ result, title, subtitle, primary }) {
+  return (
+    <div
+      className={`rounded-lg p-md flex flex-col gap-1.5 ${
+        result.recovered ? "bg-tertiary-container/10 border border-tertiary-container/30" : "bg-error-container/40 border border-error/30"
+      } ${primary ? "ring-1 ring-primary/30" : ""}`}
+    >
+      {title && (
+        <div className="flex items-center justify-between">
+          <span className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">{title}</span>
+          <span className="font-label-sm text-label-sm text-on-surface-variant">{subtitle}</span>
+        </div>
+      )}
+      <div className="flex items-center gap-sm font-headline-sm text-headline-sm">
+        <span
+          className={`material-symbols-outlined ${result.recovered ? "text-tertiary-container" : "text-error"}`}
+          style={{ fontVariationSettings: "'FILL' 1" }}
+          aria-hidden="true"
+        >
+          {result.recovered ? "check_circle" : "cancel"}
+        </span>
+        <span className={result.recovered ? "text-tertiary-container" : "text-error"}>
+          {result.recovered ? `Recovered ${inr(result.recovered_inr)}` : "Not recovered"}
+        </span>
+      </div>
+      <div className="font-body-md text-body-md text-on-surface-variant">
+        Executed as <span className="font-medium text-on-surface">{ACTION_LABEL[result.executed_action]}</span>
+        {result.is_override && (
+          <>
+            {" "}
+            (agent actually chose <span className="font-medium text-on-surface">{ACTION_LABEL[result.agent_action]}</span>)
+          </>
+        )}
+      </div>
+      {result.bypassed_hard_rule && (
+        <div className="flex items-start gap-1.5 font-label-md text-label-md text-error bg-error-container/60 px-2.5 py-1.5 rounded mt-1">
+          <span className="material-symbols-outlined text-[14px] mt-0.5" aria-hidden="true">
+            warning
+          </span>
+          <span>
+            This override bypassed a real hard rule (<span className="font-medium">{result.bypassed_hard_rule.replace(/_/g, " ")}</span>) —
+            in production this path is blocked, this is a hypothetical for comparison only.
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function RetryTimeline({ transactionId, decision, compact = false }) {
   const [playhead, setPlayhead] = useState(0); // 0-100, animated position
   const [phase, setPhase] = useState("idle"); // idle | playing | done
-  const [result, setResult] = useState(null);
+  // Two separate slots instead of one shared result — once both are filled, the
+  // agent's real decision and an alternative action can be shown side by side as
+  // an actual comparison instead of overwriting each other one at a time.
+  const [results, setResults] = useState({ agent: null, override: null });
   const [pendingLabel, setPendingLabel] = useState("");
   const [stageIndex, setStageIndex] = useState(-1);
   const timers = useRef([]);
   const { logAction } = useActivity();
+  const showComparison = results.agent && results.override;
 
   const timingStep = decision.trace.find((s) => s.step === "regulatory_timing_check");
   const hasSchedule = timingStep?.detail?.result === "pass";
@@ -35,8 +91,8 @@ export default function RetryTimeline({ transactionId, decision, compact = false
   async function run(overrideAction, label) {
     timers.current.forEach(clearTimeout);
     timers.current = [];
+    const slot = overrideAction ? "override" : "agent";
     setPhase("playing");
-    setResult(null);
     setPlayhead(0);
     setStageIndex(0);
     setPendingLabel(label);
@@ -58,7 +114,7 @@ export default function RetryTimeline({ transactionId, decision, compact = false
       }),
       new Promise((r) => timers.current.push(setTimeout(r, STAGES.length * STAGE_MS))),
     ]);
-    setResult(res);
+    setResults((prev) => ({ ...prev, [slot]: res }));
     setPhase("done");
     setStageIndex(-1);
     logAction({
@@ -72,7 +128,7 @@ export default function RetryTimeline({ transactionId, decision, compact = false
   const reset = () => {
     timers.current.forEach(clearTimeout);
     setPhase("idle");
-    setResult(null);
+    setResults({ agent: null, override: null });
     setPlayhead(0);
     setStageIndex(-1);
   };
@@ -161,45 +217,29 @@ export default function RetryTimeline({ transactionId, decision, compact = false
         </div>
       )}
 
-      {result && phase === "done" && (
-        <div
-          className={`rounded-lg p-md flex flex-col gap-1.5 ${
-            result.recovered ? "bg-tertiary-container/10 border border-tertiary-container/30" : "bg-error-container/40 border border-error/30"
-          }`}
-        >
-          <div className="flex items-center gap-sm font-headline-sm text-headline-sm">
-            <span
-              className={`material-symbols-outlined ${result.recovered ? "text-tertiary-container" : "text-error"}`}
-              style={{ fontVariationSettings: "'FILL' 1" }}
-              aria-hidden="true"
-            >
-              {result.recovered ? "check_circle" : "cancel"}
-            </span>
-            <span className={result.recovered ? "text-tertiary-container" : "text-error"}>
-              {result.recovered ? `Recovered ${inr(result.recovered_inr)}` : "Not recovered"}
-            </span>
+      {phase === "done" && showComparison && (
+        <div>
+          <p className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider mb-xs">
+            WHY Agent vs. the alternative — actual outcomes, not a claim
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-sm">
+            <OutcomeBox
+              title="WHY Agent"
+              subtitle={ACTION_LABEL[decision.action]}
+              result={results.agent}
+              primary
+            />
+            <OutcomeBox
+              title="Alternative"
+              subtitle={ACTION_LABEL["retry_now"]}
+              result={results.override}
+            />
           </div>
-          <div className="font-body-md text-body-md text-on-surface-variant">
-            Executed as <span className="font-medium text-on-surface">{ACTION_LABEL[result.executed_action]}</span>
-            {result.is_override && (
-              <>
-                {" "}
-                (agent actually chose <span className="font-medium text-on-surface">{ACTION_LABEL[result.agent_action]}</span>)
-              </>
-            )}
-          </div>
-          {result.bypassed_hard_rule && (
-            <div className="flex items-start gap-1.5 font-label-md text-label-md text-error bg-error-container/60 px-2.5 py-1.5 rounded mt-1">
-              <span className="material-symbols-outlined text-[14px] mt-0.5" aria-hidden="true">
-                warning
-              </span>
-              <span>
-                This override bypassed a real hard rule (<span className="font-medium">{result.bypassed_hard_rule.replace(/_/g, " ")}</span>) —
-                in production this path is blocked, this is a hypothetical for comparison only.
-              </span>
-            </div>
-          )}
         </div>
+      )}
+
+      {phase === "done" && !showComparison && (results.agent || results.override) && (
+        <OutcomeBox result={results.agent || results.override} />
       )}
 
       <div className="flex flex-wrap gap-sm mt-md">

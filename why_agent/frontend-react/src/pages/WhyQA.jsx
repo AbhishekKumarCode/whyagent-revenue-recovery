@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { getTransaction, askWhy, inr } from "../api.js";
 import { ACTION_LABEL } from "../constants.js";
 import { useActivity } from "../context/ActivityContext.jsx";
 import TraceStep from "../components/TraceStep.jsx";
+import ErrorState from "../components/ErrorState.jsx";
 
 // One real, human-readable line per step — not just "Classify" with no content.
 function summarizeStep(step) {
@@ -63,11 +64,12 @@ export default function WhyQA() {
   const [txn, setTxn] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
+  const [error, setError] = useState(null);
   const threadRef = useRef(null);
   const seeded = useRef(false);
   const { logAction } = useActivity();
 
-  useEffect(() => {
+  const load = useCallback(() => {
     // Reset the chat when navigating between transactions' Why pages (e.g. via the
     // History/Notifications dropdowns, which link straight to /transactions/{id}/why
     // and just swap the :id param on the already-mounted component) — otherwise the
@@ -75,9 +77,12 @@ export default function WhyQA() {
     // re-fires for the new one.
     setTxn(null);
     setMessages([]);
+    setError(null);
     seeded.current = false;
-    getTransaction(id).then(setTxn);
+    getTransaction(id).then(setTxn).catch(() => setError(true));
   }, [id]);
+
+  useEffect(load, [load]);
 
   useEffect(() => {
     if (txn && !seeded.current) {
@@ -111,6 +116,14 @@ export default function WhyQA() {
     setInput("");
     send(q);
   };
+
+  if (error) {
+    return (
+      <main className="flex-1 overflow-y-auto p-lg">
+        <ErrorState message="Couldn't load this transaction." onRetry={load} />
+      </main>
+    );
+  }
 
   if (!txn) {
     return <div className="p-lg text-on-surface-variant">Loading…</div>;

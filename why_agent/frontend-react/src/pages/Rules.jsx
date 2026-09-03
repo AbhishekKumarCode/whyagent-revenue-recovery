@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { fetchJSON } from "../api.js";
 import { ACTION_LABEL } from "../constants.js";
+import ErrorState from "../components/ErrorState.jsx";
 
 const RULE_ICON = {
   max_retries: "restart_alt",
@@ -22,10 +23,22 @@ function formatWindow([start, end]) {
 
 export default function Rules() {
   const [rules, setRules] = useState(null);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    fetchJSON("/rules").then(setRules);
+  const load = useCallback(() => {
+    setError(null);
+    fetchJSON("/rules").then(setRules).catch(() => setError(true));
   }, []);
+
+  useEffect(load, [load]);
+
+  if (error) {
+    return (
+      <main className="flex-1 overflow-y-auto bg-background p-margin-mobile md:p-margin-desktop">
+        <ErrorState message="Couldn't load settings." onRetry={load} />
+      </main>
+    );
+  }
 
   if (!rules) {
     return <div className="p-lg text-on-surface-variant">Loading…</div>;
@@ -136,7 +149,7 @@ export default function Rules() {
             Regulatory Compliance
           </h2>
           <div className="space-y-sm">
-            <div className="flex justify-between items-center data-row border-b border-[#E3E8EF] px-xs">
+            <div className="flex justify-between items-center data-row border-b border-outline-variant px-xs">
               <span className="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider">Pre-debit notification</span>
               <span className="mono-num text-on-surface text-[14px] text-right">
                 {rules.regulatory_compliance.pre_debit_notification_lead_hours}h minimum — RBI's 2026 e-mandate framework

@@ -44,7 +44,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-[#F5F7FA] p-gutter">
+    <div className="min-h-screen w-full flex items-center justify-center bg-background p-gutter">
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center gap-sm mb-lg">
           <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-on-primary font-bold text-lg">
@@ -124,7 +124,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={busy}
-              className="w-full bg-[#3395FF] hover:bg-primary transition-colors text-white font-headline-sm text-headline-sm py-3 px-4 rounded-lg flex justify-center items-center gap-sm shadow-sm hover:shadow disabled:opacity-60"
+              className="w-full bg-primary hover:bg-primary/90 transition-colors text-white font-headline-sm text-headline-sm py-3 px-4 rounded-lg flex justify-center items-center gap-sm shadow-sm hover:shadow disabled:opacity-60"
             >
               {busy ? "Please wait…" : mode === "login" ? "Log In" : "Create Account"}
             </button>

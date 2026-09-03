@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getTransactions, getEvaluation, fetchJSON, inr } from "../api.js";
 import { FAILURE_REASON_LABEL, ACTION_LABEL } from "../constants.js";
+import ErrorState from "../components/ErrorState.jsx";
 
 function StatCard({ label, value, accent, trailing }) {
   return (
@@ -25,13 +26,17 @@ export default function Dashboard() {
   const [txns, setTxns] = useState(null);
   const [evalResult, setEvalResult] = useState(null);
   const [rules, setRules] = useState(null);
+  const [error, setError] = useState(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    getTransactions().then(setTxns);
-    getEvaluation().then(setEvalResult);
-    fetchJSON("/rules").then(setRules);
+  const load = useCallback(() => {
+    setError(null);
+    getTransactions().then(setTxns).catch(() => setError(true));
+    getEvaluation().then(setEvalResult).catch(() => setError(true));
+    fetchJSON("/rules").then(setRules).catch(() => setError(true));
   }, []);
+
+  useEffect(load, [load]);
 
   const byReason = useMemo(() => {
     if (!txns) return null;
@@ -47,6 +52,14 @@ export default function Dashboard() {
 
   const recent = txns?.slice(0, 5);
   const totalTriggers = rules?.hard_rules.reduce((s, r) => s + r.triggered_count, 0) ?? null;
+
+  if (error) {
+    return (
+      <main className="flex-1 overflow-y-auto p-md md:p-lg lg:p-margin-desktop">
+        <ErrorState message="Couldn't load the dashboard." onRetry={load} />
+      </main>
+    );
+  }
 
   return (
     <main className="flex-1 overflow-y-auto p-md md:p-lg lg:p-margin-desktop">

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getTransactions, getEvaluation, inr } from "../api.js";
 import { FAILURE_REASON_LABEL, ACTION_LABEL } from "../constants.js";
+import ErrorState from "../components/ErrorState.jsx";
 
 const ACTION_ICON = {
   retry_now: "pending",
@@ -41,14 +42,18 @@ export default function Transactions() {
   const [txns, setTxns] = useState(null);
   const [evalResult, setEvalResult] = useState(null);
   const [page, setPage] = useState(0);
+  const [error, setError] = useState(null);
   const [searchParams] = useSearchParams();
   const query = (searchParams.get("q") || "").toLowerCase();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    getTransactions().then(setTxns);
-    getEvaluation().then(setEvalResult);
+  const load = useCallback(() => {
+    setError(null);
+    getTransactions().then(setTxns).catch(() => setError(true));
+    getEvaluation().then(setEvalResult).catch(() => setError(true));
   }, []);
+
+  useEffect(load, [load]);
 
   const filtered = useMemo(() => {
     if (!txns) return null;
@@ -66,6 +71,14 @@ export default function Transactions() {
 
   const pageRows = filtered?.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
   const pageCount = filtered ? Math.ceil(filtered.length / PAGE_SIZE) : 0;
+
+  if (error) {
+    return (
+      <main className="flex-1 overflow-y-auto p-md md:p-lg lg:p-margin-desktop">
+        <ErrorState message="Couldn't load transactions." onRetry={load} />
+      </main>
+    );
+  }
 
   return (
     <main className="flex-1 overflow-y-auto p-md md:p-lg lg:p-margin-desktop">

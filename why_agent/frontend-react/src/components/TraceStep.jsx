@@ -45,6 +45,25 @@ export default function TraceStep({ index, step, summary, compact = false }) {
           )}
         </div>
         <p className="font-body-md text-body-md text-on-surface-variant leading-snug mt-0.5">{summary}</p>
+        {!compact && (
+          <details className="mt-1 group">
+            <summary className="font-label-sm text-label-sm text-outline cursor-pointer select-none list-none inline-flex items-center gap-0.5 hover:text-primary transition-colors">
+              <span className="material-symbols-outlined text-[13px] transition-transform group-open:rotate-90" aria-hidden="true">
+                chevron_right
+              </span>
+              Raw data
+            </summary>
+            <div className="mt-1 font-mono text-[11px] leading-relaxed text-on-surface-variant bg-surface-container rounded p-2 overflow-x-auto">
+              {Object.entries(step.detail)
+                .filter(([k]) => k !== "result")
+                .map(([k, v]) => (
+                  <div key={k}>
+                    <span className="text-primary">{k}</span>: {Array.isArray(v) ? v.join(", ") : String(v)}
+                  </div>
+                ))}
+            </div>
+          </details>
+        )}
       </div>
     </div>
   );
