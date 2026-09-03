@@ -14,6 +14,21 @@ const ACTION_ICON = {
 
 const PAGE_SIZE = 8;
 
+// Same real cutoff the agent's hard rules use (engine.py's COST_VALUE_CUTOFF) —
+// flagging low-value customers here is grounded in an actual threshold the
+// decision pipeline enforces, not an invented visual category.
+const LOW_VALUE_CUTOFF = 0.15;
+
+function initials(name) {
+  return (name || "?")
+    .trim()
+    .split(/\s+/)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
+
 function exportCsv(rows) {
   const header = ["transaction_id", "customer_name", "plan_name", "amount_inr", "failure_reason", "decision"];
   const lines = [header.join(",")];
@@ -152,13 +167,13 @@ export default function Transactions() {
             </button>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[800px]">
+            <table className="w-full text-left border-collapse min-w-[960px]">
               <thead>
                 <tr className="bg-surface-container-low border-b border-outline-variant font-label-md text-label-md text-on-surface-variant">
-                  <th className="py-sm px-md font-semibold w-1/4">Customer</th>
+                  <th className="py-sm px-md font-semibold w-[30%]">Customer</th>
                   <th className="py-sm px-md font-semibold w-1/6">Amount (₹)</th>
-                  <th className="py-sm px-md font-semibold w-1/4">Failure Reason</th>
-                  <th className="py-sm px-md font-semibold w-1/4">Agent Decision</th>
+                  <th className="py-sm px-md font-semibold w-1/5">Failure Reason</th>
+                  <th className="py-sm px-md font-semibold w-1/5">Agent Decision</th>
                   <th className="py-sm px-md font-semibold w-1/12 text-center">Status</th>
                 </tr>
               </thead>
@@ -179,6 +194,8 @@ export default function Transactions() {
                 )}
                 {pageRows?.map((t) => {
                   const isFraud = t.decision.hard_rule_triggered === "fraud_escalate";
+                  const ctx = t.customer_context || {};
+                  const isLowValue = ctx.customer_value_score != null && ctx.customer_value_score < LOW_VALUE_CUTOFF;
                   return (
                     <tr
                       key={t.transaction_id}
@@ -188,8 +205,39 @@ export default function Transactions() {
                       }`}
                     >
                       <td className="py-md px-md">
-                        <div className={`font-medium ${isFraud ? "text-error" : ""}`}>{t.customer_name}</div>
-                        <div className="text-xs text-on-surface-variant">{t.plan_name}</div>
+                        <div className="flex items-center gap-sm">
+                          <div
+                            className={`w-8 h-8 rounded-full flex items-center justify-center font-label-sm text-label-sm font-semibold shrink-0 ${
+                              isFraud ? "bg-error-container text-on-error-container" : "bg-secondary-container text-on-secondary-container"
+                            }`}
+                          >
+                            {initials(t.customer_name)}
+                          </div>
+                          <div className="min-w-0">
+                            <div className={`font-medium truncate ${isFraud ? "text-error" : ""}`}>{t.customer_name}</div>
+                            <div className="text-xs text-on-surface-variant truncate flex items-center gap-1 flex-wrap">
+                              <span>{t.plan_name}</span>
+                              {ctx.months_active != null && <span>· {ctx.months_active}mo customer</span>}
+                              {ctx.on_time_payment_rate != null && <span>· {Math.round(ctx.on_time_payment_rate * 100)}% on-time</span>}
+                            </div>
+                            {(ctx.is_do_not_contact || isLowValue) && (
+                              <div className="flex items-center gap-xs mt-0.5">
+                                {ctx.is_do_not_contact && (
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-on-surface-variant bg-surface-container px-1.5 py-0.5 rounded">
+                                    <span className="material-symbols-outlined text-[11px]" aria-hidden="true">block</span>
+                                    Do-not-contact
+                                  </span>
+                                )}
+                                {isLowValue && (
+                                  <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-on-surface-variant bg-surface-container px-1.5 py-0.5 rounded">
+                                    <span className="material-symbols-outlined text-[11px]" aria-hidden="true">trending_down</span>
+                                    Low value
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td className={`py-md px-md font-medium tabular-nums ${isFraud ? "text-error" : ""}`}>{inr(t.amount_inr)}</td>
                       <td className="py-md px-md">

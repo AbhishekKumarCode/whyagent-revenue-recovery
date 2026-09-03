@@ -139,6 +139,13 @@ def list_transactions(user=Depends(auth.get_current_user)):
                 "plan_name": txn.plan_name,
                 "failure_reason": txn.failure_reason.value,
                 "decision": decision.to_dict(),
+                "customer_context": {
+                    "months_active": customer.months_active,
+                    "on_time_payment_rate": customer.on_time_payment_rate,
+                    "customer_value_score": customer.customer_value_score,
+                    "is_fraud_flagged": customer.is_fraud_flagged,
+                    "is_do_not_contact": customer.is_do_not_contact,
+                },
             }
         )
     return rows
